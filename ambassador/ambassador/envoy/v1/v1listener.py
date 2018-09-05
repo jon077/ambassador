@@ -116,8 +116,10 @@ class V1Listener(dict):
                 "timeout_ms": group.get("timeout_ms", 3000),
             }
 
-            if "prefix" in group:
-                route["prefix"] = group.prefix
+            if "route" in group:
+                # This should populate exactly one of prefix, path, or regex in Envoy route
+                field, value = group.route
+                route[field.value] = value
 
             if "regex" in group:
                 route["regex"] = group.regex

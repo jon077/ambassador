@@ -1,5 +1,6 @@
 from ambassador.utils import RichStatus
 from typing import Any, ClassVar, Dict, List, Optional, Union, TYPE_CHECKING
+from enum import Enum
 
 from ..config import Config
 
@@ -11,6 +12,10 @@ import hashlib
 if TYPE_CHECKING:
     from .ir import IR
 
+class EnvoyRoute(Enum):
+    prefix = 'prefix'
+    path = 'path'
+    regex = 'regex'
 
 # Kind of cheating here so that it's easy to json-serialize Headers.
 class Header (dict):
@@ -121,6 +126,8 @@ class IRMapping (IRResource):
             **new_args
         )
 
+        self.route = self._get_envoy_route()
+
         # OK. After all that we can compute the group ID...
         self.group_id = self._group_id()
 
@@ -146,6 +153,12 @@ class IRMapping (IRResource):
                 h.update(hdr.value.encode('utf-8'))
 
         return h.hexdigest()
+
+    def _get_envoy_route(self) -> (EnvoyRoute, str):
+        if self.get('prefix_regex', False):
+            return EnvoyRoute.regex, self.get('prefix')
+        else:
+            return EnvoyRoute.prefix, self.get('prefix')
 
     def _route_weight(self):
         len_headers = 0
@@ -330,8 +343,6 @@ class IRMappingGroup (IRResource):
         'headers': True,
         'host_rewrite': True,
         'method': True,
-        'prefix': True,
-        'prefix_regex': True,
         'rewrite': True,
         'timeout_ms': True
     }
@@ -364,6 +375,9 @@ class IRMappingGroup (IRResource):
 
         if ('rewrite' not in self) and ('rewrite' in mapping):
             self.rewrite = mapping.rewrite
+
+        if 'route' in mapping:
+            self.route = mapping['route']
 
         for k in IRMappingGroup.CoreMappingKeys:
             if (k not in self) and (k in mapping):
@@ -441,12 +455,6 @@ class IRMappingGroup (IRResource):
 
         if not self.get('rewrite', None):
             self.rewrite = '/'
-
-        # if mapping.get('prefix_regex', False):
-        #     # if `prefix_regex` is true, then use the `prefix` attribute as the envoy's regex
-        #     route['regex'] = mapping['prefix']
-        # else:
-        #     route['prefix'] = mapping['prefix']
 
         if self.shadows:
             # Only one shadow is supported right now.
